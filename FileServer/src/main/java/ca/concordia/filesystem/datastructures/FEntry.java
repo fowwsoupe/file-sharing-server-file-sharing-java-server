@@ -18,6 +18,15 @@ public class FEntry {
         this.firstBlock = firstblock;
     }
 
+    public FEntry(String filename) {
+        if (filename == null || filename.length() > 11) {
+            throw new IllegalArgumentException("Filename cannot be null or longer than 11 characters.");
+        }
+        this.filename = filename;
+        this.filesize = 0;
+        this.firstBlock = -1;
+    }
+
     // Getters and Setters
     public String getFilename() {
         return filename;
@@ -44,4 +53,9 @@ public class FEntry {
     public short getFirstBlock() {
         return firstBlock;
     }
+
+    public void setFirstBlock(short firstBlock) {
+        this.firstBlock = firstBlock;
+    }
+
 }
