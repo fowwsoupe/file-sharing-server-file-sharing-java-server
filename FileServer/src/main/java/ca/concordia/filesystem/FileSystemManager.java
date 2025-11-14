@@ -249,10 +249,10 @@ public class FileSystemManager {
 
     private void ensureValidName(String name) throws Exception {
         if (name == null || name.isEmpty()) {
-            throw new Exception("Invalid File Name");
+            throw new Exception("Invalid filename");
         }
         if (name.length() > 11) {
-            throw new Exception("ERROR: filename too large");
+            throw new Exception("Filename is too long");
         }
     }
 
