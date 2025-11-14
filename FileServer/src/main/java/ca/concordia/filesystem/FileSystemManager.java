@@ -22,6 +22,8 @@ public class FileSystemManager {
     private FEntry[] inodeTable;
     private boolean[] freeBlockList;
 
+    private FNode[] fnodes;
+
     public FileSystemManager(String filename, int totalSize) {
         if (instance != null) {
             throw new IllegalStateException("FileSystemManager is already initialized.");
@@ -29,7 +31,14 @@ public class FileSystemManager {
         try {
             inodeTable = new FEntry[MAXFILES];
             freeBlockList = new boolean[MAXBLOCKS];
-            for (int i = 0; i < MAXBLOCKS; i++) freeBlockList[i] = true;
+            for (int i = 0; i < MAXBLOCKS; i++) {
+                freeBlockList[i] = true;
+            }
+
+            fnodes = new FNode[MAXBLOCKS];
+            for (int i = 0; i < MAXBLOCKS; i++) {
+                fnodes[i] = new FNode();
+            }
 
             File f = new File(filename);
             disk = new RandomAccessFile(f, "rw");
@@ -67,10 +76,9 @@ public class FileSystemManager {
             if (idx == -1) throw new Exception("File not found");
             FEntry fe = inodeTable[idx];
 
-            short b = fe.getFirstBlock();
-            if (isValidBlock(b)) {
-                zeroBlock(b);
-                freeBlockList[b] = true;
+            short firstFNode = fe.getFirstBlock();
+            if (firstFNode >= 0) {
+                freeChain(firstFNode, true);
             }
             inodeTable[idx] = null;
         } finally {
@@ -89,22 +97,72 @@ public class FileSystemManager {
             if (idx == -1) throw new Exception("Ifle not found");
             FEntry fe = inodeTable[idx];
 
-            short target = fe.getFirstBlock();
-            if (!isValidBlock(target)) {
-                int free = findFreeBlock();
-                if (free == -1) throw new Exception("no free space");
-                target = (short) free;
+            int size = contents.length;
+
+            int maxBytes = MAXBLOCKS * BLOCK_SIZE;
+            if (size > maxBytes) {
+                throw new Exception("File is too big (max " + maxBytes + " bytes)");
             }
 
-            writeBlock(target, contents, 0, contents.length);
-
-            if (contents.length < BLOCK_SIZE) {
-                zeroBlockRange(target, contents.length, BLOCK_SIZE - contents.length);
+            if (size == 0) {
+                short oldFirst = fe.getFirstBlock();
+                if (oldFirst >= 0) {
+                    freeChain(oldFirst, false);
+                }
+                fe.setFirstBlock((short) -1);
+                fe.setFilesize((short) 0);
+                return;
             }
 
-            fe.setFirstBlock(target);
-            fe.setFilesize((short) contents.length);
-            freeBlockList[target] = false;
+            int neededBlocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+            short oldFirst = fe.getFirstBlock();
+            if (oldFirst >= 0) {
+                freeChain(oldFirst, false); // free old blocks/nodes, no need to zero
+            }
+
+            int[] fnodeIdx = new int[neededBlocks];
+            int[] blockIdx = new int[neededBlocks];
+
+            for (int i = 0; i < neededBlocks; i++) {
+                int fn = findFreeFNode();
+                int blk = findFreeBlock();
+                if (fn == -1 || blk == -1) {
+                    throw new Exception("no free space");
+                }
+                fnodeIdx[i] = fn;
+                blockIdx[i] = blk;
+
+                freeBlockList[blk] = false;
+                fnodes[fn].setBlockIndex((short) blk);
+            }
+
+            for (int i = 0; i < neededBlocks; i++) {
+                if (i == neededBlocks - 1) {
+                    fnodes[fnodeIdx[i]].setNextBlock(FNode.NO_NEXT);
+                } else {
+                    fnodes[fnodeIdx[i]].setNextBlock((short) fnodeIdx[i + 1]);
+                }
+            }
+
+            int offset = 0;
+            for (int i = 0; i < neededBlocks; i++) {
+                short blk = (short) blockIdx[i];
+                int remaining = size - offset;
+                int len = Math.min(BLOCK_SIZE, remaining);
+
+                writeBlock(blk, contents, offset, len);
+
+                if (len < BLOCK_SIZE) {
+                    zeroBlockRange(blk, len, BLOCK_SIZE - len);
+                }
+
+                offset += len;
+            }
+
+            fe.setFirstBlock((short) fnodeIdx[0]);
+            fe.setFilesize((short) size);
+
         } finally {
             globalLock.unlock();
         }
