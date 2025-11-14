@@ -19,9 +19,9 @@ public class FileSystemManager {
 
     private final RandomAccessFile disk;
 
-    private final FEntry[] inodeTable;     // file entries
-    private final boolean[] freeBlockList; // which data blocks are free
-    private final FNode[] fnodes;          // block-chain nodes
+    private final FEntry[] inodeTable;
+    private final boolean[] freeBlockList;
+    private final FNode[] fnodes;
 
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final Lock readLock = rwLock.readLock();
@@ -51,7 +51,7 @@ public class FileSystemManager {
     }
 
 
-    // CREATE <filename>
+    // create <filename>
     public void createFile(String fileName) throws Exception {
         writeLock.lock();
         try {
@@ -59,7 +59,6 @@ public class FileSystemManager {
 
             int existing = findFileIndex(fileName);
             if (existing != -1) {
-                // Idempotent create: if it already exists, do nothing
                 return;
             }
 
@@ -77,7 +76,7 @@ public class FileSystemManager {
         }
     }
 
-    // DELETE <filename>
+    // delete <filename>
     public void deleteFile(String fileName) throws Exception {
         writeLock.lock();
         try {
@@ -89,7 +88,7 @@ public class FileSystemManager {
 
             short firstFNode = fe.getFirstBlock();
             if (firstFNode >= 0) {
-                freeChain(firstFNode, true); // free all blocks and zero them
+                freeChain(firstFNode, true);
             }
 
             inodeTable[idx] = null;
@@ -98,7 +97,7 @@ public class FileSystemManager {
         }
     }
 
-    // WRITE <filename> <contents>
+    // write <filename> <contents>
     public void writeFile(String fileName, byte[] contents) throws Exception {
         if (contents == null) {
             contents = new byte[0];
@@ -118,7 +117,6 @@ public class FileSystemManager {
                 throw new Exception("File is too big (max " + maxBytes + " bytes)");
             }
 
-            // If new content is empty: just free old chain and clear entry
             if (size == 0) {
                 short oldFirst = fe.getFirstBlock();
                 if (oldFirst >= 0) {
@@ -131,7 +129,6 @@ public class FileSystemManager {
 
             int neededBlocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-            // Free old chain (simple, non-atomic but fine for this exercise)
             short oldFirst = fe.getFirstBlock();
             if (oldFirst >= 0) {
                 freeChain(oldFirst, false);
@@ -140,13 +137,11 @@ public class FileSystemManager {
             int[] fnodeIdx = new int[neededBlocks];
             int[] blockIdx = new int[neededBlocks];
 
-            // Allocate new fnodes + blocks
             for (int i = 0; i < neededBlocks; i++) {
                 int fn = findFreeFNode();
                 int blk = findFreeBlock();
 
                 if (fn == -1 || blk == -1) {
-                    // Roll back anything already reserved
                     for (int j = 0; j < i; j++) {
                         int blkUsed = blockIdx[j];
                         if (blkUsed >= 0) {
@@ -173,7 +168,6 @@ public class FileSystemManager {
                 }
             }
 
-            // Write data into blocks
             int offset = 0;
             for (int i = 0; i < neededBlocks; i++) {
                 short blk = (short) blockIdx[i];
@@ -189,7 +183,6 @@ public class FileSystemManager {
                 offset += len;
             }
 
-            // Update FEntry
             fe.setFirstBlock((short) fnodeIdx[0]);
             fe.setFilesize((short) size);
         } finally {
@@ -197,7 +190,7 @@ public class FileSystemManager {
         }
     }
 
-    // READ <filename>
+    // read <filename>
     public byte[] readFile(String fileName) throws Exception {
         readLock.lock();
         try {
@@ -245,7 +238,7 @@ public class FileSystemManager {
         }
     }
 
-    // LIST
+    // list
     public String[] listFiles() {
         readLock.lock();
         try {
