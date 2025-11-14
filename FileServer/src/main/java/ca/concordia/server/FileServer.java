@@ -14,7 +14,6 @@ public class FileServer {
     private final int port;
 
     public FileServer(int port, String fileSystemName, int totalSize) {
-        // Initialize the shared filesystem
         this.fsManager = new FileSystemManager(fileSystemName, totalSize);
         this.port = port;
     }
@@ -23,12 +22,11 @@ public class FileServer {
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Server started. Listening on port " + port + "...");
 
-            // Main server loop: accept clients one by one
+            //accept clients one by one
             while (true) {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("New client connected: " + clientSocket);
 
-                // Handle each client in its own thread
                 Thread t = new Thread(() -> handleClient(clientSocket));
                 t.start();
             }
@@ -48,7 +46,7 @@ public class FileServer {
         ) {
             String line;
 
-            // Read commands line by line from this client
+            // Read commands line by line
             while ((line = reader.readLine()) != null) {
                 System.out.println("Received from client: " + line);
 
@@ -77,14 +75,14 @@ public class FileServer {
             return "ERROR: empty command";
         }
 
-        // Split into at most 3 parts so WRITE can keep spaces in the data
+        // Split into maximum 3 parts
         String[] parts = line.trim().split("\\s+", 3);
         String command = parts[0].toUpperCase();
 
         try {
+            //case fro every methods
             switch (command) {
                 case "CREATE":
-                    // CREATE <filename>
                     if (parts.length < 2) {
                         return "ERROR: CREATE requires a filename";
                     }
@@ -92,7 +90,6 @@ public class FileServer {
                     return "OK: created " + parts[1];
 
                 case "WRITE":
-                    // WRITE <filename> <data>
                     if (parts.length < 3) {
                         return "ERROR: WRITE requires filename and data";
                     }
@@ -100,7 +97,6 @@ public class FileServer {
                     return "OK: wrote " + parts[1];
 
                 case "READ":
-                    // READ <filename>
                     if (parts.length < 2) {
                         return "ERROR: READ requires a filename";
                     }
@@ -108,7 +104,6 @@ public class FileServer {
                     return "OK: " + new String(data);
 
                 case "DELETE":
-                    // DELETE <filename>
                     if (parts.length < 2) {
                         return "ERROR: DELETE requires a filename";
                     }
@@ -116,12 +111,11 @@ public class FileServer {
                     return "OK: deleted " + parts[1];
 
                 case "LIST":
-                    // LIST
                     String[] files = fsManager.listFiles();
                     return "OK: " + String.join(",", files);
 
                 case "QUIT":
-                    // Client will close after this
+                    // client closes after this
                     return "OK: goodbye";
 
                 default:
