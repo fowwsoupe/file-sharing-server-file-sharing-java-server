@@ -25,6 +25,7 @@ public class FileServer {
 
             while (true) {
                 Socket clientSocket = serverSocket.accept();
+                new Thread(new ClientHandler(clientSocket,fsManager)).start();//Client handler for every new thread for the accepted client by the server
                 System.out.println("Handling client: " + clientSocket);
                 try (
                         BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
