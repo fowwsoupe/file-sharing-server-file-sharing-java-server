@@ -14,7 +14,6 @@ public class FileSystemManager {
 
     private final int MAXFILES = 5;
     private final int MAXBLOCKS = 10;
-
     private static final int BLOCK_SIZE = 128;
 
     private final RandomAccessFile disk;
@@ -23,12 +22,15 @@ public class FileSystemManager {
     private final boolean[] freeBlockList;
     private final FNode[] fnodes;
 
+    //reader/writer lock
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+    //Shortcuts references for read/write access
     private final Lock readLock = rwLock.readLock();
     private final Lock writeLock = rwLock.writeLock();
 
     public FileSystemManager(String filename, int totalSize) {
         try {
+            //create empty inode table
             inodeTable = new FEntry[MAXFILES];
             freeBlockList = new boolean[MAXBLOCKS];
             for (int i = 0; i < MAXBLOCKS; i++) {
@@ -40,8 +42,10 @@ public class FileSystemManager {
                 fnodes[i] = new FNode();
             }
 
+            //open the disk file
             File f = new File(filename);
             disk = new RandomAccessFile(f, "rw");
+            //check if disk file is correct size
             if (!f.exists() || disk.length() < totalSize) {
                 disk.setLength(totalSize);
             }
@@ -52,20 +56,24 @@ public class FileSystemManager {
 
     // create <filename>
     public void createFile(String fileName) throws Exception {
+        //lock around the critical section
         writeLock.lock();
         try {
             ensureValidName(fileName);
 
+            //Check if file already exists
             int existing = findFileIndex(fileName);
             if (existing != -1) {
                 return;
             }
 
+            //Finds a free slot in the inode table
             int slot = findFreeInode();
             if (slot == -1) {
                 throw new Exception("No free file entries");
             }
 
+            //create a new inode
             FEntry fe = new FEntry(fileName);
             fe.setFilesize((short) 0);
             fe.setFirstBlock((short) -1);
@@ -79,6 +87,7 @@ public class FileSystemManager {
     public void deleteFile(String fileName) throws Exception {
         writeLock.lock();
         try {
+            //search for the file in the inode entry
             int idx = findFileIndex(fileName);
             if (idx == -1) {
                 throw new Exception("File not found");
@@ -90,6 +99,7 @@ public class FileSystemManager {
                 freeChain(firstFNode, true);
             }
 
+            //remove the inode entry from the table
             inodeTable[idx] = null;
         } finally {
             writeLock.unlock();
@@ -104,6 +114,7 @@ public class FileSystemManager {
 
         writeLock.lock();
         try {
+            //find the inode for the file
             int idx = findFileIndex(fileName);
             if (idx == -1) {
                 throw new Exception("File not found");
@@ -116,6 +127,7 @@ public class FileSystemManager {
                 throw new Exception("File is too big (max " + maxBytes + " bytes)");
             }
 
+            //clear the file
             if (size == 0) {
                 short oldFirst = fe.getFirstBlock();
                 if (oldFirst >= 0) {
@@ -158,7 +170,7 @@ public class FileSystemManager {
                 fnodes[fn].setBlockIndex((short) blk);
             }
 
-            // Link fnodes into a chain
+            // Link fnodes into a chain (like linked list)
             for (int i = 0; i < neededBlocks; i++) {
                 if (i == neededBlocks - 1) {
                     fnodes[fnodeIdx[i]].setNextBlock(FNode.NO_NEXT);
@@ -167,6 +179,7 @@ public class FileSystemManager {
                 }
             }
 
+            //this ap^rt allows to write
             int offset = 0;
             for (int i = 0; i < neededBlocks; i++) {
                 short blk = (short) blockIdx[i];
@@ -193,12 +206,14 @@ public class FileSystemManager {
     public byte[] readFile(String fileName) throws Exception {
         readLock.lock();
         try {
+            //find the inode for the file
             int idx = findFileIndex(fileName);
             if (idx == -1) {
                 throw new Exception("File not found");
             }
             FEntry fe = inodeTable[idx];
 
+            //determine the size of the file
             int size = Short.toUnsignedInt(fe.getFilesize());
             byte[] out = new byte[size];
             if (size == 0) {
@@ -211,6 +226,7 @@ public class FileSystemManager {
             }
 
             int offset = 0;
+            //traverse the linked list to reqd the file in order
             while (fnodeIndex >= 0 && offset < size) {
                 FNode node = fnodes[fnodeIndex];
                 short blk = node.getBlockIndex();
@@ -242,6 +258,7 @@ public class FileSystemManager {
         readLock.lock();
         try {
             ArrayList<String> names = new ArrayList<>();
+            //inode table represents the filesystem directory structure
             for (FEntry fe : inodeTable) {
                 if (fe != null) {
                     names.add(fe.getFilename());
@@ -253,7 +270,10 @@ public class FileSystemManager {
         }
     }
 
+    //Helper section for the methods
+
     private void ensureValidName(String name) throws Exception {
+        //check if file is empty or not
         if (name == null || name.isEmpty()) {
             throw new Exception("Invalid filename");
         }
@@ -347,6 +367,7 @@ public class FileSystemManager {
     private void freeChain(short firstFNode, boolean zeroData) throws Exception {
         short current = firstFNode;
 
+        //follows the linked list of fnode until the last node
         while (current >= 0 && current < MAXBLOCKS) {
             FNode node = fnodes[current];
             short blk = node.getBlockIndex();
